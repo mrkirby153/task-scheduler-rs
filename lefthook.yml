@@ -5,3 +5,8 @@ pre-commit:
       glob: "*.rs"
       run: cargo sqlx prepare && git add .sqlx
       stage_fixed: true
+    nix-format:
+      tags: nix style
+      glob: "*.nix"
+      run: nix fmt {staged_files}
+      stage_fixed: true
