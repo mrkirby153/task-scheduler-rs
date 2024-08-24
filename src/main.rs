@@ -17,6 +17,5 @@ async fn main() -> Result<()> {
 
     // println!("{:?}", shirt);
     // println!("{:?}", buf);
-    protos::Task::default();
     Ok(())
 }

@@ -15,8 +15,7 @@ fn discover_protos() -> Vec<String> {
 fn main() -> Result<()> {
     let protos = discover_protos();
     protos.iter().for_each(|proto| {
-        println!("cargo::rerun-if-changed={}", proto);
+        tonic_build::compile_protos(proto).unwrap();
     });
-    prost_build::compile_protos(&protos, &["proto/"])?;
     Ok(())
 }

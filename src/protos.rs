@@ -1,1 +1,3 @@
-include!(concat!(env!("OUT_DIR"), "/task_scheduler.rs"));
+pub mod messages {
+    tonic::include_proto!("messages");
+}

@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package task_scheduler;
+package messages;
 
 import "google/protobuf/timestamp.proto";
 
