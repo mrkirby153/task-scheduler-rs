@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package rpc;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/any.proto";
+
+service TaskScheduler {
+  rpc ScheduleTask(ScheduleTaskRequest) returns (ScheduleTaskResponse);
+  rpc CancelTask(CancelTaskRequest) returns (CancelTaskResponse);
+}
+
+message ScheduleTaskRequest {
+  google.protobuf.Timestamp run_at = 1;
+  string topic = 2;
+  google.protobuf.Any payload = 3;
+}
+
+message ScheduleTaskResponse { string task_id = 1; }
+
+message CancelTaskRequest { string task_id = 1; }
+
+message CancelTaskResponse {
+  string task_id = 1;
+  bool success = 2;
+}

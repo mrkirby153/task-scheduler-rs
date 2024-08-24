@@ -19,7 +19,10 @@
         default = task-scheduler;
       };
       devShell = pkgs.mkShell {
-        buildInpts = with pkgs; [protobuf];
+        nativeBuildInputs = with pkgs; [protobuf dbmate sqlx-cli lefthook];
+        shellHook = ''
+          export RUST_LOG=debug
+        '';
       };
       formatter = pkgs.alejandra;
     });

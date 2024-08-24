@@ -1,3 +1,3 @@
-pub mod messages {
-    tonic::include_proto!("messages");
+pub mod rpc {
+    tonic::include_proto!("rpc");
 }
