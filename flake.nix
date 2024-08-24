@@ -19,7 +19,7 @@
         default = task-scheduler;
       };
       devShell = pkgs.mkShell {
-        buildInpts = with pkgs; [];
+        buildInpts = with pkgs; [protobuf];
       };
       formatter = pkgs.alejandra;
     });

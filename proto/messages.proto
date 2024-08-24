@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+package task_scheduler;
+
+import "google/protobuf/timestamp.proto";
+
+message Task { google.protobuf.Timestamp start_time = 1; }
