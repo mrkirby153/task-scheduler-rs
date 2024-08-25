@@ -5,12 +5,14 @@ use lapin::{
     types::FieldTable,
     Connection, ConnectionProperties,
 };
+use prometheus::{metrics::INCOMING_MESSAGES, serve};
 use std::env;
 use tracing::{debug, info, warn};
 
 use futures_lite::stream::StreamExt;
 
 mod id;
+mod prometheus;
 mod protos;
 
 #[tokio::main]
@@ -56,11 +58,12 @@ async fn main() -> Result<()> {
         while let Some(delivery) = consumer.next().await {
             let delivery = delivery.expect("Error in consumer");
             info!(?delivery, "Received message");
+            INCOMING_MESSAGES.inc();
             delivery.ack(BasicAckOptions::default()).await.expect("ack");
         }
     });
 
-    handle.await?;
+    let _ = tokio::join![handle, serve()];
 
     // let db_url = env::var("DATABASE_URL")?;
     // debug!("Connecting to database: {}", db_url);
@@ -95,4 +98,12 @@ async fn main() -> Result<()> {
     // debug!("Test: {:?}", retrieval.topic);
 
     Ok(())
+}
+
+async fn testing() {
+    info!("Hello from testing")
+}
+
+async fn testing2() {
+    info!("Hello from testing2")
 }
