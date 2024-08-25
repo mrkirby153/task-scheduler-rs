@@ -8,6 +8,8 @@ anyhow = "1.0.86"
 bytes = "1.7.1"
 chrono = "0.4.38"
 dotenvy = "0.15.7"
+futures-lite = "2.3.0"
+lapin = "2.5.0"
 prost = "0.13.1"
 prost-types = "0.13.1"
 sqlx = { version = "0.8.1", features = [
