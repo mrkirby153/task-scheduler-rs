@@ -9,7 +9,7 @@ use lapin::{
 use prometheus::{metrics::INCOMING_MESSAGES, serve};
 use sqlx::postgres::PgPoolOptions;
 use std::{env, sync::Arc};
-use tokio::{sync::RwLock, time::sleep};
+use tokio::time::sleep;
 use tracing::{debug, info, warn};
 use ulid::Ulid;
 
@@ -82,48 +82,19 @@ async fn main() -> Result<()> {
     tokio::spawn(async move {
         info!("Spawned a new task");
         sleep(tokio::time::Duration::from_secs(5)).await;
-        info!("Woke up");
-        info!("Locked db");
         let _ = db
             .schedule(DatabaseTask {
                 id: Ulid::new(),
                 topic: "hello".to_string(),
-                run_at: chrono::Utc::now(),
+                run_at: chrono::Utc::now() + chrono::Duration::seconds(5),
                 payload: vec![1, 2, 3],
             })
             .await;
     });
 
     let _ = tokio::join!(handle, serve(), async move {
-        // let mut db = db2.lock().await;
-        // db.run().await;
         db2.run().await;
     });
-
-    // let db = db::Database::new(pool);
-    // let a = Arc::new(Mutex::new(db));
-
-    // let b = Arc::clone(&a);
-
-    // tokio::spawn(async move {
-    //     info!("Spawning a new task");
-    //     sleep(tokio::time::Duration::from_secs(5)).await;
-
-    //     let mut db = b.lock().await;
-    //     let _ = db
-    //         .schedule(DatabaseTask {
-    //             id: Ulid::new(),
-    //             topic: "hello".to_string(),
-    //             run_at: chrono::Utc::now().naive_utc(),
-    //             payload: vec![1, 2, 3],
-    //         })
-    //         .await;
-    // });
-
-    // let _ = tokio::join![handle, serve(), async move {
-    //     let mut db = a.lock().await;
-    //     db.schedule_next().await;
-    // }];
 
     Ok(())
 }
