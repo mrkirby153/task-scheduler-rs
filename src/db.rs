@@ -1,4 +1,4 @@
-use std::{sync::RwLock, time::Duration};
+use std::{sync::Mutex, time::Duration};
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -10,7 +10,7 @@ use ulid::Ulid;
 
 pub struct Database {
     pool: Pool<Postgres>,
-    token: RwLock<CancellationTokenWrwapper>,
+    token: Mutex<CancellationTokenWrwapper>,
 }
 
 struct CancellationTokenWrwapper(Option<CancellationToken>);
@@ -26,7 +26,7 @@ impl Database {
     pub fn new(pool: Pool<Postgres>) -> Self {
         Self {
             pool,
-            token: RwLock::new(CancellationTokenWrwapper(None)),
+            token: Mutex::new(CancellationTokenWrwapper(None)),
         }
     }
 
@@ -44,7 +44,7 @@ impl Database {
     async fn run_outstanding_tasks(&self) {}
 
     fn get_token(&self) -> CancellationToken {
-        let mut token = self.token.write().unwrap();
+        let mut token = self.token.lock().unwrap();
         if token.0.is_none() {
             token.0 = Some(CancellationToken::new());
         }
@@ -69,7 +69,7 @@ impl Database {
     }
 
     fn interrupt(&self) {
-        if let Some(token) = self.token.write().unwrap().0.take() {
+        if let Some(token) = self.token.lock().unwrap().0.take() {
             debug!("Canceling the previous task");
             token.cancel();
         }
