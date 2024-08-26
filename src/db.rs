@@ -10,10 +10,10 @@ use ulid::Ulid;
 
 pub struct Database {
     pool: Pool<Postgres>,
-    token: Mutex<CancellationTokenWrwapper>,
+    token: Mutex<CancellationTokenInner>,
 }
 
-struct CancellationTokenWrwapper(Option<CancellationToken>);
+struct CancellationTokenInner(Option<CancellationToken>);
 
 pub struct DatabaseTask {
     pub id: Ulid,
@@ -26,7 +26,7 @@ impl Database {
     pub fn new(pool: Pool<Postgres>) -> Self {
         Self {
             pool,
-            token: Mutex::new(CancellationTokenWrwapper(None)),
+            token: Mutex::new(CancellationTokenInner(None)),
         }
     }
 
