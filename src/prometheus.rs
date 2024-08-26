@@ -25,7 +25,7 @@ fn register_custom_metrics() {
 
 pub async fn serve() {
     register_custom_metrics();
-    let addr = ([0, 0, 0, 0], 8080);
+    let addr = ([0, 0, 0, 0], 8081);
 
     info!("Starting metrics server at: {:?}", addr);
 

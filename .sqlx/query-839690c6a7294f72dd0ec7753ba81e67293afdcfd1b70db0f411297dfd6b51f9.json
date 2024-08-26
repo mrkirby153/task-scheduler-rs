@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO tasks (id, topic, run_at, payload) VALUES ($1, $2, $3, $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Varchar",
+        "Timestamptz",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "839690c6a7294f72dd0ec7753ba81e67293afdcfd1b70db0f411297dfd6b51f9"
+}

@@ -2,7 +2,7 @@
 CREATE TABLE tasks (
     id bytea PRIMARY KEY, 
     topic varchar(255) NOT NULL,
-    run_at timestamp NOT NULL,
+    run_at timestamptz NOT NULL,
     payload bytea NOT NULL
 );
 

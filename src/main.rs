@@ -1,4 +1,5 @@
 use anyhow::Result;
+use db::DatabaseTask;
 use dotenvy::dotenv;
 use lapin::{
     options::{BasicAckOptions, BasicConsumeOptions, QueueDeclareOptions},
@@ -6,11 +7,15 @@ use lapin::{
     Connection, ConnectionProperties,
 };
 use prometheus::{metrics::INCOMING_MESSAGES, serve};
-use std::env;
+use sqlx::postgres::PgPoolOptions;
+use std::{env, sync::Arc};
+use tokio::{sync::RwLock, time::sleep};
 use tracing::{debug, info, warn};
+use ulid::Ulid;
 
 use futures_lite::stream::StreamExt;
 
+mod db;
 mod id;
 mod prometheus;
 mod protos;
@@ -53,7 +58,6 @@ async fn main() -> Result<()> {
             FieldTable::default(),
         )
         .await?;
-
     let handle = tokio::spawn(async move {
         while let Some(delivery) = consumer.next().await {
             let delivery = delivery.expect("Error in consumer");
@@ -63,47 +67,63 @@ async fn main() -> Result<()> {
         }
     });
 
-    let _ = tokio::join![handle, serve()];
+    let db_url = env::var("DATABASE_URL")?;
+    debug!("Connecting to database: {}", db_url);
 
-    // let db_url = env::var("DATABASE_URL")?;
-    // debug!("Connecting to database: {}", db_url);
+    let pool = PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&db_url)
+        .await?;
 
-    // let pool = PgPoolOptions::new()
-    //     .max_connections(5)
-    //     .connect(&db_url)
-    //     .await?;
+    let db = Arc::new(db::Database::new(pool));
 
-    // let dt = Local::now();
+    let db2 = Arc::clone(&db);
 
-    // let ulid: Id = Id(ulid::Ulid::new());
-    // info!("Generated ULID: {}", ulid);
-    // info!("As bytes: {:?}", ulid.to_bytes());
+    tokio::spawn(async move {
+        info!("Spawned a new task");
+        sleep(tokio::time::Duration::from_secs(5)).await;
+        info!("Woke up");
+        info!("Locked db");
+        let _ = db
+            .schedule(DatabaseTask {
+                id: Ulid::new(),
+                topic: "hello".to_string(),
+                run_at: chrono::Utc::now(),
+                payload: vec![1, 2, 3],
+            })
+            .await;
+    });
 
-    // let bytes = [0u8; 16];
+    let _ = tokio::join!(handle, serve(), async move {
+        // let mut db = db2.lock().await;
+        // db.run().await;
+        db2.run().await;
+    });
 
-    // let query =
-    //     sqlx::query("INSERT INTO tasks (id, topic, run_at, payload) VALUES ($1, $2, $3, $4)")
-    //         .bind(ulid)
-    //         .bind("test")
-    //         .bind(dt)
-    //         .bind(bytes)
-    //         .execute(&pool)
-    //         .await?;
+    // let db = db::Database::new(pool);
+    // let a = Arc::new(Mutex::new(db));
 
-    // debug!("Inserted {} rows", query.rows_affected());
+    // let b = Arc::clone(&a);
 
-    // let retrieval = sqlx::query!("SELECT * FROM tasks WHERE id = $1", &ulid.to_bytes())
-    //     .fetch_one(&pool)
-    //     .await?;
-    // debug!("Test: {:?}", retrieval.topic);
+    // tokio::spawn(async move {
+    //     info!("Spawning a new task");
+    //     sleep(tokio::time::Duration::from_secs(5)).await;
+
+    //     let mut db = b.lock().await;
+    //     let _ = db
+    //         .schedule(DatabaseTask {
+    //             id: Ulid::new(),
+    //             topic: "hello".to_string(),
+    //             run_at: chrono::Utc::now().naive_utc(),
+    //             payload: vec![1, 2, 3],
+    //         })
+    //         .await;
+    // });
+
+    // let _ = tokio::join![handle, serve(), async move {
+    //     let mut db = a.lock().await;
+    //     db.schedule_next().await;
+    // }];
 
     Ok(())
-}
-
-async fn testing() {
-    info!("Hello from testing")
-}
-
-async fn testing2() {
-    info!("Hello from testing2")
 }
