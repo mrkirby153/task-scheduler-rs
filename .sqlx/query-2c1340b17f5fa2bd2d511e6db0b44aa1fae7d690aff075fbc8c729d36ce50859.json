@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, topic, run_at, payload FROM tasks WHERE run_at <= $1 ORDER BY run_at ASC",
+  "query": "SELECT id, exchange, routing_key, run_at, payload FROM tasks WHERE run_at <= $1 ORDER BY run_at ASC",
   "describe": {
     "columns": [
       {
@@ -10,16 +10,21 @@
       },
       {
         "ordinal": 1,
-        "name": "topic",
+        "name": "exchange",
         "type_info": "Varchar"
       },
       {
         "ordinal": 2,
+        "name": "routing_key",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
         "name": "run_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "payload",
         "type_info": "Bytea"
       }
@@ -31,10 +36,11 @@
     },
     "nullable": [
       false,
+      true,
       false,
       false,
       false
     ]
   },
-  "hash": "5b25046d4120243560038191bec0a216ce2c246a1710c9b009e50c978e3c1971"
+  "hash": "2c1340b17f5fa2bd2d511e6db0b44aa1fae7d690aff075fbc8c729d36ce50859"
 }

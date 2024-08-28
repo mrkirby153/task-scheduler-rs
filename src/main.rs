@@ -1,24 +1,23 @@
+use amqp::Amqp;
 use anyhow::Result;
-use db::DatabaseTask;
+use db::Database;
 use dotenvy::dotenv;
-use lapin::{
-    options::{BasicAckOptions, BasicConsumeOptions, QueueDeclareOptions},
-    types::FieldTable,
-    Connection, ConnectionProperties,
-};
-use prometheus::{metrics::INCOMING_MESSAGES, serve};
+
+use prometheus::{metrics::TOTAL_TASKS, serve};
+use protos::rpc::task_scheduler_server::TaskSchedulerServer;
+use rpc_server::RpcServer;
 use sqlx::postgres::PgPoolOptions;
-use std::{env, sync::Arc};
+use std::{env, sync::Arc, time::Duration};
 use tokio::time::sleep;
+use tonic::transport::Server;
 use tracing::{debug, info, warn};
-use ulid::Ulid;
 
-use futures_lite::stream::StreamExt;
-
+mod amqp;
 mod db;
 mod id;
 mod prometheus;
 mod protos;
+mod rpc_server;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -31,70 +30,52 @@ async fn main() -> Result<()> {
 
     let addr = env::var("AMQP_ADDR")?;
 
-    info!("Connecting to AMQP server at: {}", addr);
-
-    let con = Connection::connect(&addr, ConnectionProperties::default()).await?;
-
-    info!("Connected to AMQP server");
-
-    let channel_1 = con.create_channel().await?;
-    let channel_2 = con.create_channel().await?;
-
-    let queue = channel_1
-        .queue_declare(
-            "hello",
-            QueueDeclareOptions::default(),
-            FieldTable::default(),
-        )
-        .await?;
-
-    info!(?queue, "Declared queue");
-
-    let mut consumer = channel_2
-        .basic_consume(
-            "hello",
-            "my_consumer",
-            BasicConsumeOptions::default(),
-            FieldTable::default(),
-        )
-        .await?;
-    let handle = tokio::spawn(async move {
-        while let Some(delivery) = consumer.next().await {
-            let delivery = delivery.expect("Error in consumer");
-            info!(?delivery, "Received message");
-            INCOMING_MESSAGES.inc();
-            delivery.ack(BasicAckOptions::default()).await.expect("ack");
-        }
-    });
+    let amqp = Arc::new(Amqp::new(&addr).await?);
 
     let db_url = env::var("DATABASE_URL")?;
     debug!("Connecting to database: {}", db_url);
 
+    let pool_size = env::var("DATABASE_POOL_SIZE")
+        .unwrap_or("5".to_string())
+        .parse::<u32>()?;
+
     let pool = PgPoolOptions::new()
-        .max_connections(5)
+        .max_connections(pool_size)
         .connect(&db_url)
         .await?;
 
-    let db = Arc::new(db::Database::new(pool));
+    let db = Arc::new(Database::new(pool, amqp.clone()));
 
-    let db2 = Arc::clone(&db);
+    let server_address = env::var("GRPC_SERVER_ADDRESS").unwrap_or("[::1]:50051".to_string());
 
-    tokio::spawn(async move {
-        info!("Spawned a new task");
-        sleep(tokio::time::Duration::from_secs(5)).await;
-        let _ = db
-            .schedule(DatabaseTask {
-                id: Ulid::new(),
-                topic: "hello".to_string(),
-                run_at: chrono::Utc::now() + chrono::Duration::seconds(5),
-                payload: vec![1, 2, 3],
-            })
-            .await;
-    });
+    info!("Starting gRPC server at: {}", server_address);
 
-    let _ = tokio::join!(handle, serve(), async move {
-        db2.run().await;
-    });
+    let rpc_server = RpcServer::new(db.clone());
+    let server = Server::builder()
+        .add_service(TaskSchedulerServer::new(rpc_server))
+        .serve(server_address.parse()?);
+
+    let statistics = collect_statistics(db.clone());
+
+    info!("Ready!");
+    let _ = tokio::join!(
+        serve(),
+        async move {
+            db.run().await;
+        },
+        server,
+        statistics
+    );
 
     Ok(())
+}
+
+async fn collect_statistics(db: Arc<Database>) {
+    loop {
+        if let Ok(count) = db.get_scheduled_task_count().await {
+            TOTAL_TASKS.set(count);
+        }
+
+        sleep(Duration::from_secs(30)).await;
+    }
 }

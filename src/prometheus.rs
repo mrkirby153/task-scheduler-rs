@@ -1,8 +1,8 @@
 use std::sync::LazyLock;
 
-use metrics::INCOMING_MESSAGES;
+use metrics::SCHEDULED_TASKS;
 use prometheus::Registry;
-use tracing::info;
+use tracing::{debug, info};
 use warp::{reject::Rejection, reply::Reply, Filter};
 
 pub static REGISTRY: LazyLock<Registry> = LazyLock::new(Registry::new);
@@ -10,17 +10,56 @@ pub static REGISTRY: LazyLock<Registry> = LazyLock::new(Registry::new);
 pub mod metrics {
     use std::sync::LazyLock;
 
-    use prometheus::IntCounter;
+    use prometheus::{IntCounter, IntGauge};
 
-    pub static INCOMING_MESSAGES: LazyLock<IntCounter> = LazyLock::new(|| {
-        IntCounter::new("incoming_messages", "Incoming messages").expect("metric cannot be created")
+    pub static SCHEDULED_TASKS: LazyLock<IntCounter> = LazyLock::new(|| {
+        IntCounter::new("scheduled_tasks", "Scheduled tasks").expect("metric cannot be created")
+    });
+
+    pub static CANCELLED_TASKS: LazyLock<IntCounter> = LazyLock::new(|| {
+        IntCounter::new("cancelled_tasks", "Cancelled tasks").expect("metric cannot be created")
+    });
+
+    pub static GET_TASKS: LazyLock<IntCounter> = LazyLock::new(|| {
+        IntCounter::new("get_tasks", "Get tasks").expect("metric cannot be created")
+    });
+
+    pub static PROCESSED_TASKS: LazyLock<IntCounter> = LazyLock::new(|| {
+        IntCounter::new("processed_tasks", "Tasks delivered to RabbitMQ")
+            .expect("metric cannot be created")
+    });
+
+    pub static SUCCESSFUL_TASKS: LazyLock<IntCounter> = LazyLock::new(|| {
+        IntCounter::new("successful_tasks", "Successful tasks").expect("metric cannot be created")
+    });
+
+    pub static FAILED_TASKS: LazyLock<IntCounter> = LazyLock::new(|| {
+        IntCounter::new("failed_tasks", "Failed tasks").expect("metric cannot be created")
+    });
+
+    pub static TOTAL_TASKS: LazyLock<IntGauge> = LazyLock::new(|| {
+        IntGauge::new("total_tasks", "Total tasks").expect("metric cannot be created")
     });
 }
 
 fn register_custom_metrics() {
     REGISTRY
-        .register(Box::new(INCOMING_MESSAGES.clone()))
+        .register(Box::new(SCHEDULED_TASKS.clone()))
         .expect("metric cannot be registered");
+    REGISTRY
+        .register(Box::new(metrics::CANCELLED_TASKS.clone()))
+        .expect("metric cannot be registered");
+    REGISTRY
+        .register(Box::new(metrics::PROCESSED_TASKS.clone()))
+        .expect("metric cannot be registered");
+    REGISTRY
+        .register(Box::new(metrics::GET_TASKS.clone()))
+        .expect("metric cannot be registered");
+    REGISTRY
+        .register(Box::new(metrics::TOTAL_TASKS.clone()))
+        .expect("metric cannot be registered");
+
+    debug!("Registered custom metrics");
 }
 
 pub async fn serve() {

@@ -1,17 +1,22 @@
-use std::{collections::HashMap, sync::Mutex, time::Duration};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use sqlx::{Pool, Postgres};
 use tokio::{select, time::sleep};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 use ulid::Ulid;
 
-use crate::id::Id;
+use crate::{amqp::Amqp, id::Id};
 
 pub struct Database {
     pool: Pool<Postgres>,
+    amqp: Arc<Amqp>,
     token: Mutex<CancellationTokenInner>,
 }
 
@@ -19,22 +24,25 @@ struct CancellationTokenInner(Option<CancellationToken>);
 
 pub struct DatabaseTask {
     pub id: Ulid,
-    pub topic: String,
+    pub exchange: Option<String>,
+    pub routing_key: String,
     pub run_at: DateTime<Utc>,
     pub payload: Vec<u8>,
 }
 
 struct DatabaseTaskTransport {
     id: Vec<u8>,
-    topic: String,
+    exchange: Option<String>,
+    routing_key: String,
     run_at: DateTime<Utc>,
     payload: Vec<u8>,
 }
 
 impl Database {
-    pub fn new(pool: Pool<Postgres>) -> Self {
+    pub fn new(pool: Pool<Postgres>, amqp: Arc<Amqp>) -> Self {
         Self {
             pool,
+            amqp,
             token: Mutex::new(CancellationTokenInner(None)),
         }
     }
@@ -57,7 +65,7 @@ impl Database {
         let by_topic = tasks.iter().fold(
             HashMap::new(),
             |mut acc: HashMap<&String, Vec<&DatabaseTask>>, task| {
-                acc.entry(&task.topic).or_default().push(task);
+                acc.entry(&task.routing_key).or_default().push(task);
                 acc
             },
         );
@@ -75,7 +83,9 @@ impl Database {
             debug!("Running tasks for topic: {}", topic);
             for task in tasks {
                 debug!("Running task: {}", task.id);
-                // TODO: Publish the task
+                if let Err(e) = self.amqp.publish(task).await {
+                    error!("Failed to publish task: {}", e);
+                }
 
                 sqlx::query("DELETE FROM tasks WHERE id = $1")
                     .bind(Id(task.id))
@@ -100,9 +110,10 @@ impl Database {
     pub async fn schedule(&self, task: DatabaseTask) -> Result<()> {
         let id_bytes = task.id.to_bytes();
         let _ = sqlx::query!(
-            "INSERT INTO tasks (id, topic, run_at, payload) VALUES ($1, $2, $3, $4)",
+            "INSERT INTO tasks (id, exchange, routing_key, run_at, payload) VALUES ($1, $2, $3, $4, $5)",
             &id_bytes,
-            task.topic,
+            task.exchange,
+            task.routing_key,
             task.run_at,
             task.payload
         )
@@ -114,6 +125,13 @@ impl Database {
         Ok(())
     }
 
+    pub async fn get_scheduled_task_count(&self) -> Result<i64> {
+        let count = sqlx::query!("SELECT COUNT(id) FROM tasks")
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(count.count.unwrap_or(0))
+    }
+
     async fn get_outstanding_tasks(
         &self,
         run_at: Option<DateTime<Utc>>,
@@ -122,7 +140,7 @@ impl Database {
         debug!("Getting oustanding tasks since {:?}", run_at);
         let transport = sqlx::query_as!(
             DatabaseTaskTransport,
-            "SELECT id, topic, run_at, payload FROM tasks WHERE run_at <= $1 ORDER BY run_at ASC",
+            "SELECT id, exchange, routing_key, run_at, payload FROM tasks WHERE run_at <= $1 ORDER BY run_at ASC",
             run_at
         )
         .fetch_all(&self.pool)
@@ -182,7 +200,8 @@ impl TryInto<DatabaseTask> for DatabaseTaskTransport {
         let bytes = self.id.as_slice();
         Ok(DatabaseTask {
             id: Ulid::from_bytes(bytes.try_into()?),
-            topic: self.topic,
+            routing_key: self.routing_key,
+            exchange: self.exchange,
             run_at: self.run_at,
             payload: self.payload,
         })
