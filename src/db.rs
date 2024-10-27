@@ -12,7 +12,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 use ulid::Ulid;
 
-use crate::{amqp::Amqp, id::Id};
+use crate::{amqp::Amqp, id::Id, protos::rpc::Task};
 
 pub struct Database {
     pool: Pool<Postgres>,
@@ -56,6 +56,58 @@ impl Database {
         } else {
             None
         }
+    }
+
+    pub async fn get_task(&self, task_id: Ulid) -> Option<DatabaseTask> {
+        let task_id = task_id.to_bytes();
+        let query = sqlx::query_as!(
+            DatabaseTaskTransport,
+            "SELECT * FROM tasks WHERE id = $1",
+            &task_id
+        )
+        .fetch_optional(&self.pool)
+        .await;
+
+        if let Ok(Some(transport)) = query {
+            transport.try_into().ok()
+        } else {
+            None
+        }
+    }
+
+    pub async fn get_many_tasks(&self, task_ids: &[Ulid]) -> Option<Vec<DatabaseTask>> {
+        let task_ids = task_ids.iter().map(|id| id.to_bytes()).collect::<Vec<_>>();
+
+        let query = sqlx::query_as!(
+            DatabaseTaskTransport,
+            "SELECT * FROM tasks WHERE id = ANY($1)",
+            &task_ids.iter().map(|id| id.to_vec()).collect::<Vec<_>>()
+        )
+        .fetch_all(&self.pool)
+        .await;
+
+        if let Ok(transport) = query {
+            let tasks = transport
+                .into_iter()
+                .map(|t| t.try_into())
+                .filter_map(Result::ok)
+                .collect();
+            Some(tasks)
+        } else {
+            None
+        }
+    }
+
+    pub async fn cancel_task(&self, task_id: Ulid) -> Result<()> {
+        let task_id = task_id.to_bytes();
+        let _ = sqlx::query("DELETE FROM tasks WHERE id = $1")
+            .bind(task_id)
+            .execute(&self.pool)
+            .await;
+
+        self.interrupt();
+
+        Ok(())
     }
 
     async fn run_outstanding_tasks(&self) -> Result<i32> {
@@ -107,7 +159,7 @@ impl Database {
         token.0.as_ref().unwrap().clone()
     }
 
-    pub async fn schedule(&self, task: DatabaseTask) -> Result<()> {
+    pub async fn schedule(&self, task: &DatabaseTask) -> Result<()> {
         let id_bytes = task.id.to_bytes();
         let _ = sqlx::query!(
             "INSERT INTO tasks (id, exchange, routing_key, run_at, payload) VALUES ($1, $2, $3, $4, $5)",
@@ -205,5 +257,20 @@ impl TryInto<DatabaseTask> for DatabaseTaskTransport {
             run_at: self.run_at,
             payload: self.payload,
         })
+    }
+}
+
+impl Into<Task> for DatabaseTask {
+    fn into(self) -> Task {
+        Task {
+            task_id: self.id.to_string(),
+            exchange: self.exchange.unwrap_or_default(),
+            routing_key: self.routing_key,
+            run_at: Some(prost_types::Timestamp {
+                seconds: self.run_at.timestamp(),
+                nanos: self.run_at.timestamp_subsec_nanos() as i32,
+            }),
+            payload: self.payload,
+        }
     }
 }

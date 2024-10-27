@@ -1,6 +1,6 @@
 use std::sync::LazyLock;
 
-use metrics::SCHEDULED_TASKS;
+use metrics::{BULK_TASK_REQUESTS, SCHEDULED_TASKS};
 use prometheus::Registry;
 use tracing::{debug, info};
 use warp::{reject::Rejection, reply::Reply, Filter};
@@ -40,6 +40,10 @@ pub mod metrics {
     pub static TOTAL_TASKS: LazyLock<IntGauge> = LazyLock::new(|| {
         IntGauge::new("total_tasks", "Total tasks").expect("metric cannot be created")
     });
+
+    pub static BULK_TASK_REQUESTS: LazyLock<IntGauge> = LazyLock::new(|| {
+        IntGauge::new("bulk_task_requests", "Bulk task requests").expect("metric cannot be created")
+    });
 }
 
 fn register_custom_metrics() {
@@ -57,6 +61,9 @@ fn register_custom_metrics() {
         .expect("metric cannot be registered");
     REGISTRY
         .register(Box::new(metrics::TOTAL_TASKS.clone()))
+        .expect("metric cannot be registered");
+    REGISTRY
+        .register(Box::new(BULK_TASK_REQUESTS.clone()))
         .expect("metric cannot be registered");
 
     debug!("Registered custom metrics");

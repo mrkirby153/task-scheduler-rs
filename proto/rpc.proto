@@ -3,36 +3,36 @@ syntax = "proto3";
 package rpc;
 
 import "google/protobuf/timestamp.proto";
-import "google/protobuf/any.proto";
 
 service TaskScheduler {
   rpc ScheduleTask(ScheduleTaskRequest) returns (ScheduleTaskResponse);
   rpc CancelTask(CancelTaskRequest) returns (CancelTaskResponse);
-  rpc GetTask(GetTaskRequest) returns (GetTaskResponse);
+  rpc GetTask(GetTaskRequest) returns (Task);
+  rpc GetManyTasks(BulkTaskRequest) returns (BulkTaskResponse);
 }
 
 message ScheduleTaskRequest {
   google.protobuf.Timestamp run_at = 1;
   string exchange = 2;
   string routing_key = 3;
-  google.protobuf.Any payload = 4;
+  bytes payload = 4;
 }
 
 message ScheduleTaskResponse { string task_id = 1; }
 
 message CancelTaskRequest { string task_id = 1; }
 
-message CancelTaskResponse {
-  string task_id = 1;
-  bool success = 2;
-}
+message CancelTaskResponse { string task_id = 1; }
 
-message GetTaskRequest { bytes task_id = 1; }
+message GetTaskRequest { string task_id = 1; }
 
-message GetTaskResponse {
+message Task {
   string task_id = 1;
   google.protobuf.Timestamp run_at = 2;
   string exchange = 3;
   string routing_key = 4;
-  google.protobuf.Any payload = 5;
+  bytes payload = 5;
 }
+message BulkTaskRequest { repeated string task_id = 1; }
+
+message BulkTaskResponse { repeated Task tasks = 1; }
