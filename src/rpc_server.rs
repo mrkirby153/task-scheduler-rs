@@ -48,7 +48,7 @@ impl TaskScheduler for RpcServer {
 
         if self.db.schedule(&task).await.is_ok() {
             Ok(Response::new(ScheduleTaskResponse {
-                task_id: task.id.to_string(),
+                task_id: task.id.to_bytes().to_vec(),
             }))
         } else {
             Err(Status::internal("Failed to schedule task"))
@@ -60,9 +60,8 @@ impl TaskScheduler for RpcServer {
         request: Request<CancelTaskRequest>,
     ) -> Result<Response<CancelTaskResponse>, Status> {
         CANCELLED_TASKS.inc();
-
-        let task_id = Ulid::from_string(&request.get_ref().task_id)
-            .map_err(|_| Status::invalid_argument("Invalid task_id"))?;
+        let req = request.get_ref();
+        let task_id = self.get_task_id(&req.task_id)?;
 
         if self.db.get_task(task_id).await.is_none() {
             return Err(Status::not_found("Task not found"));
@@ -70,7 +69,7 @@ impl TaskScheduler for RpcServer {
 
         if self.db.cancel_task(task_id).await.is_ok() {
             Ok(Response::new(CancelTaskResponse {
-                task_id: task_id.to_string(),
+                task_id: task_id.to_bytes().to_vec(),
             }))
         } else {
             Err(Status::internal("Failed to cancel task"))
@@ -78,8 +77,7 @@ impl TaskScheduler for RpcServer {
     }
 
     async fn get_task(&self, request: Request<GetTaskRequest>) -> Result<Response<Task>, Status> {
-        let task_id = Ulid::from_string(&request.get_ref().task_id)
-            .map_err(|_| Status::invalid_argument("Invalid task_id"))?;
+        let task_id = self.get_task_id(&request.get_ref().task_id)?;
         let existing_task = self.db.get_task(task_id).await;
         if let Some(existing) = existing_task {
             Ok(Response::new(existing.into()))
@@ -96,7 +94,7 @@ impl TaskScheduler for RpcServer {
             .get_ref()
             .task_id
             .iter()
-            .map(|id| Ulid::from_string(id))
+            .map(|id| self.get_task_id(id))
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| Status::invalid_argument("Invalid task_id"))?;
 
@@ -108,5 +106,13 @@ impl TaskScheduler for RpcServer {
         } else {
             Err(Status::not_found("Task not found"))
         }
+    }
+}
+
+impl RpcServer {
+    fn get_task_id(&self, task_id: &[u8]) -> Result<Ulid, Status> {
+        Ok(Ulid::from_bytes(task_id.try_into().map_err(|_| {
+            Status::invalid_argument("Invalid task_id")
+        })?))
     }
 }

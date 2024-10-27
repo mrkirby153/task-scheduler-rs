@@ -260,17 +260,17 @@ impl TryInto<DatabaseTask> for DatabaseTaskTransport {
     }
 }
 
-impl Into<Task> for DatabaseTask {
-    fn into(self) -> Task {
+impl From<DatabaseTask> for Task {
+    fn from(task: DatabaseTask) -> Task {
         Task {
-            task_id: self.id.to_string(),
-            exchange: self.exchange.unwrap_or_default(),
-            routing_key: self.routing_key,
+            task_id: task.id.to_bytes().to_vec(),
+            exchange: task.exchange.unwrap_or_default(),
+            routing_key: task.routing_key,
             run_at: Some(prost_types::Timestamp {
-                seconds: self.run_at.timestamp(),
-                nanos: self.run_at.timestamp_subsec_nanos() as i32,
+                seconds: task.run_at.timestamp(),
+                nanos: task.run_at.timestamp_subsec_nanos() as i32,
             }),
-            payload: self.payload,
+            payload: task.payload,
         }
     }
 }

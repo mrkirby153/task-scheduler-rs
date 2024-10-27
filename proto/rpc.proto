@@ -18,21 +18,21 @@ message ScheduleTaskRequest {
   bytes payload = 4;
 }
 
-message ScheduleTaskResponse { string task_id = 1; }
+message ScheduleTaskResponse { bytes task_id = 1; }
 
-message CancelTaskRequest { string task_id = 1; }
+message CancelTaskRequest { bytes task_id = 1; }
 
-message CancelTaskResponse { string task_id = 1; }
+message CancelTaskResponse { bytes task_id = 1; }
 
-message GetTaskRequest { string task_id = 1; }
+message GetTaskRequest { bytes task_id = 1; }
 
 message Task {
-  string task_id = 1;
+  bytes task_id = 1;
   google.protobuf.Timestamp run_at = 2;
   string exchange = 3;
   string routing_key = 4;
   bytes payload = 5;
 }
-message BulkTaskRequest { repeated string task_id = 1; }
+message BulkTaskRequest { repeated bytes task_id = 1; }
 
 message BulkTaskResponse { repeated Task tasks = 1; }
